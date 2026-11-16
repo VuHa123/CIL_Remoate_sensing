@@ -78,6 +78,7 @@ class HsiLiDARData(NpyPatchDataset):
         root_test_label,
         classes=range(15),
         train=True,
+        permute_labels=True,
     ):
         super().__init__(
             root_train_data,
@@ -86,5 +87,5 @@ class HsiLiDARData(NpyPatchDataset):
             root_test_label,
             classes=classes,
             train=train,
-            permute_labels=True,
+            permute_labels=permute_labels,
         )

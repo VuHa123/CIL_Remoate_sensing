@@ -89,17 +89,30 @@ def freeze_tokens(prompt_tokens, similarity, threshold=0.5):
 
 
 class MyCilTrainNet(nn.Module):
-    def __init__(self, num_group_tokens, group_feature_size, feature_size, num_classes):
+    def __init__(self, num_group_tokens, group_feature_size, feature_size, num_classes,
+                 hsi_channels=144, batch_size=16, init_lr=0.0001, base_lr=None,
+                 fix_optimizer=False):
+        """
+        hsi_channels: number of HSI channels (144 raw, 40 after PCA as in the paper).
+        base_lr: learning rate of the base session (default: init_lr).
+        fix_optimizer: if True, rebuild Adam/scheduler at every session over the
+            parameters that are actually trainable in that session (new fc, new
+            projectors, task tokens), register task tokens as real parameters and
+            compute OT class weights in dataset order. False = original behaviour.
+        """
         super(MyCilTrainNet, self).__init__()
+        self.hsi_channels = hsi_channels
+        self.fix_optimizer = fix_optimizer
 
         # 增量类别管理
         self.n_classes = num_classes
         self.n_known = 0
 
         # 网络超参数'
-        self.init_lr = 0.0001
+        self.init_lr = init_lr
+        self.base_lr = init_lr if base_lr is None else base_lr
         self.num_epochs = 50
-        self.batch_size = 16
+        self.batch_size = batch_size
 
         # 模型训练参数
         self.momentum = 0.01
@@ -124,8 +137,11 @@ class MyCilTrainNet(nn.Module):
 
         self.shared_group_tokens = nn.Parameter(torch.zeros(num_group_tokens, group_feature_size),
                                                 requires_grad=True).to(device)
+        # fix_optimizer: task tokens of each session, registered as parameters
+        self.group_token_list = nn.ParameterList(
+            [nn.Parameter(torch.zeros(num_group_tokens, group_feature_size))] if fix_optimizer else [])
 
-        self.Prompt_Net_modality_1 = ViT_Prompt(image_size=11, patch_size=1, in_channels=144, embed_dim=128,
+        self.Prompt_Net_modality_1 = ViT_Prompt(image_size=11, patch_size=1, in_channels=hsi_channels, embed_dim=128,
                                                 num_classes=15, depth=4, num_heads=4, drop_rate=0.1, pool_size=30,
                                                 embedding_key='mean_max', prompt_init='uniform', top_k=3,
                                                 prompt_length=5, batchwise_prompt=True, prompt_key_init='uniform',
@@ -201,8 +217,19 @@ class MyCilTrainNet(nn.Module):
         for param in self.Prompt_Net_modality_2.prompt.parameters():
             param.requires_grad = False
 
-    def forward(self, x_modality_1, x_modality_2):
+    def group_tokens(self):
+        if self.fix_optimizer:
+            return torch.cat(list(self.group_token_list), dim=0)
+        return self.shared_group_tokens
 
+    def trainable_parameters(self):
+        return [p for p in self.parameters() if p.requires_grad]
+
+    def forward(self, x_modality_1, x_modality_2):
+        self.apply_stage_freezing()
+        return self._forward(x_modality_1, x_modality_2)
+
+    def apply_stage_freezing(self):
         if self.train_stage >= 2:
             for param in self.TaskAwareNet_1.grouping.parameters():
                 param.requires_grad = False
@@ -220,6 +247,7 @@ class MyCilTrainNet(nn.Module):
             for param in self.Prompt_Net_modality_2.prompt.parameters():
                 param.requires_grad = True
 
+    def _forward(self, x_modality_1, x_modality_2):
         _, res_1 = self.Prompt_Net_modality_1.forward_prompt(x_modality_1)
         _, res_2 = self.Prompt_Net_modality_2.forward_prompt(x_modality_2)
 
@@ -265,8 +293,8 @@ class MyCilTrainNet(nn.Module):
         features_medium = torch.cat([features_medium_1, features_medium_2], dim=1)
         features_medium_mean = features_medium.mean(dim=1)
 
-        _, x_1_feature = self.TaskAwareNet_1(features_medium_1, self.shared_group_tokens, prompt_out_1)
-        _, x_2_feature = self.TaskAwareNet_2(features_medium_2, self.shared_group_tokens, prompt_out_2)
+        _, x_1_feature = self.TaskAwareNet_1(features_medium_1, self.group_tokens(), prompt_out_1)
+        _, x_2_feature = self.TaskAwareNet_2(features_medium_2, self.group_tokens(), prompt_out_2)
 
         x_feature = torch.cat([x_1_feature, x_2_feature], dim=1)
         x_feature_mean = x_feature.mean(dim=1)
@@ -300,8 +328,8 @@ class MyCilTrainNet(nn.Module):
                 # 为每个P_y中的样本提取特征
                 for ex in P_y:
                     ex = Variable(torch.FloatTensor(ex)).to(device)
-                    ex_1 = ex[0:144, :, :]
-                    ex_2 = ex[144:, :, :]
+                    ex_1 = ex[0:self.hsi_channels, :, :]
+                    ex_2 = ex[self.hsi_channels:, :, :]
                     # unsqueeze(0) 的作用:是 (C, H, W) 的图像数据转换为 (1, C, H, W) 形式的批次数据
                     # 这样才能正确地喂给模型进行前向计算。
                     _, _, feature, _, _, _ = self.forward(ex_1.unsqueeze(0), ex_2.unsqueeze(0))
@@ -340,8 +368,8 @@ class MyCilTrainNet(nn.Module):
         for img in images:
             x = Variable(torch.FloatTensor(img)).to(device)
             x = x.unsqueeze(0)
-            x_1 = x[:, :144, :, :]
-            x_2 = x[:, 144:, :, :]
+            x_1 = x[:, :self.hsi_channels, :, :]
+            x_2 = x[:, self.hsi_channels:, :, :]
             _, _, feature, _, _, _ = self.forward(x_1, x_2)
             feature = feature.data.cpu().numpy()
             feature = feature / np.linalg.norm(feature)
@@ -414,6 +442,17 @@ class MyCilTrainNet(nn.Module):
         weightsbuffer = torch.tensor([weights[cls_i] for cls_i in targets]).to(device)
 
         return weights, weightsbuffer
+
+    def class_weights_from_labels(self, labels, beta=0.9999):
+        labels = np.asarray(labels)
+        unique_targets, img_num_list = np.unique(labels, return_counts=True)
+        effective_num = 1.0 - np.power(beta, img_num_list)
+        per_cls_weights = (1.0 - beta) / np.array(effective_num)
+        per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(unique_targets)
+        lookup = dict(zip(unique_targets.tolist(), per_cls_weights.tolist()))
+        weights = torch.FloatTensor(per_cls_weights).to(device)
+        buffer = torch.tensor([lookup[int(c)] for c in labels], dtype=torch.float32, device=device)
+        return weights, buffer
 
     # 获取平衡数据集并进行上采样
     def get_balanced_data(self, train_loader, num_classes, num_samples_per_class=10):
@@ -501,10 +540,28 @@ class MyCilTrainNet(nn.Module):
 
         # 增量阶段增加新的task_tokens
         if self.train_stage >= 2:
-            new_stage_token = nn.Parameter(torch.zeros(self.num_group_tokens, self.group_feature_size)).to(device)
-            self.shared_group_tokens = torch.cat([self.shared_group_tokens.detach(), new_stage_token], dim=0)
+            if self.fix_optimizer:
+                for old_tokens in self.group_token_list:
+                    old_tokens.requires_grad = False
+                self.group_token_list.append(
+                    nn.Parameter(torch.zeros(self.num_group_tokens, self.group_feature_size, device=device)))
+            else:
+                new_stage_token = nn.Parameter(torch.zeros(self.num_group_tokens, self.group_feature_size)).to(device)
+                self.shared_group_tokens = torch.cat([self.shared_group_tokens.detach(), new_stage_token], dim=0)
         else:
             self.shared_group_tokens = self.shared_group_tokens
+
+        if self.fix_optimizer:
+            self.to(device)
+            self.apply_stage_freezing()
+            params = self.trainable_parameters()
+            lr = self.base_lr if self.train_stage == 1 else self.init_lr
+            self.optimizer = optim.Adam(params, lr=lr, weight_decay=self.weight_decay)
+            self.scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=num_epochs)
+            optimizer, scheduler = self.optimizer, self.scheduler
+            print("trainable params this session: %.3fM (lr=%g)" % (sum(p.numel() for p in params) / 1e6, lr))
+            # OT class weights, indexed in dataset order (dataset index == `index` in batches)
+            _, dataset_weights = self.class_weights_from_labels(dataset.train_labels)
 
         print("已添加新的task_token!")
 
@@ -518,8 +575,8 @@ class MyCilTrainNet(nn.Module):
                 balanced_dataloader = self.get_balanced_data(loader, self.n_classes)
                 balanced_data, balanced_labels = next(iter(balanced_dataloader))
                 balanced_data = Variable(torch.FloatTensor(balanced_data)).to(device)
-                balanced_data_hsi = balanced_data[:, 0:144, :, :]
-                balanced_data_lidar = balanced_data[:, 144:, :, :]
+                balanced_data_hsi = balanced_data[:, 0:self.hsi_channels, :, :]
+                balanced_data_lidar = balanced_data[:, self.hsi_channels:, :, :]
                 balanced_labels = torch.tensor(balanced_labels, dtype=torch.long).to(device)
 
                 _, _, feature_balanced, _, _, _ = self.forward(balanced_data_hsi, balanced_data_lidar)
@@ -527,15 +584,18 @@ class MyCilTrainNet(nn.Module):
                 for epoch in range(num_epochs):
 
                     for i, batch in enumerate(loader):
-                        if len(batch[0]) != 16:
+                        if len(batch[0]) != self.batch_size:
                             continue
                         index, images, labels = tuple(t.to(device) for t in batch)
                         # images = Variable(torch.FloatTensor(images)).to(device)
-                        images_1 = images[:, 0:144, :, :]
-                        images_2 = images[:, 144:, :, :]
+                        images_1 = images[:, 0:self.hsi_channels, :, :]
+                        images_2 = images[:, self.hsi_channels:, :, :]
 
                         labels = Variable(labels).to(device)
-                        _, weights_buffer = self.calculate_class_weights(loader)
+                        if self.fix_optimizer:
+                            weights_buffer = dataset_weights
+                        else:
+                            _, weights_buffer = self.calculate_class_weights(loader)
                         weights = Variable(weights_buffer[index], requires_grad=True).to(device)
 
                         self.eval()
@@ -594,8 +654,8 @@ class MyCilTrainNet(nn.Module):
                     self.train()
                     for i, (index, images, labels) in enumerate(loader):
                         images = Variable(torch.FloatTensor(images)).to(device)
-                        images_1 = images[:, 0:144, :, :]
-                        images_2 = images[:, 144:, :, :]
+                        images_1 = images[:, 0:self.hsi_channels, :, :]
+                        images_2 = images[:, self.hsi_channels:, :, :]
 
                         labels = Variable(labels).to(device)
 

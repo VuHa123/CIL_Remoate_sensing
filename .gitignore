@@ -6,3 +6,4 @@ data_houston/
 *.pth
 __pycache__/
 *.egg-info/
+results/
