@@ -124,8 +124,9 @@ const PAPER_T4 = {
 };
 const BASELINE_DIR = path.join(RESULTS, "baselines");
 const T4_SEED = "0";
+const BASELINE_TAG = "_b32"; // batch 32 as stated in the paper; "" = PyCIL default batch 128
 const baselineRun = (m, ds) => {
-  const f = path.join(BASELINE_DIR, `${m}_adam_e1_${ds}_seed${T4_SEED}.json`);
+  const f = path.join(BASELINE_DIR, `${m}_adam_e1${BASELINE_TAG}_${ds}_seed${T4_SEED}.json`);
   return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f)) : null;
 };
 const pilotSgd = fs.existsSync(path.join(BASELINE_DIR, "icarl_houston_seed0.json"))
@@ -403,17 +404,30 @@ children.push(bullet([b("Khung mã: "), "PyCIL (github.com/G-U-N/PyCIL, commit f
 children.push(bullet([b("Dữ liệu: "), "đúng các phép chia và thứ tự lớp đã dùng cho phương pháp đề xuất (data_<bộ>/paper_seed0)."]));
 children.push(bullet([b("Backbone: "), "bài báo chỉ nói các baseline \"dùng chung kiến trúc ViT\". Tái lập dùng hai nhánh ViT giống BiCM-Prompt (chiều 128, 4 lớp, 4 head, mỗi nhánh một modality), bỏ prompt; đặc trưng = ghép trung bình token của hai nhánh (256 chiều). Số tham số ≈ 1,63M, ít hơn 2,445M của bài báo — bài báo không mô tả chi tiết nên không khớp được con số này."]));
 children.push(bullet([b("Bộ nhớ replay: "), "K = 30 / 33 / 35 chia đều cho các lớp đã học (2 / 3 / 5 mẫu/lớp ở session cuối), giống phương pháp đề xuất và đúng tiêu đề cột của Table IV."]));
-children.push(bullet([b("Optimizer: "), "bài báo không nêu siêu tham số của baseline. Mặc định của PyCIL (SGD, lr 0,1) được thiết kế cho CNN trên CIFAR và không hội tụ với ViT ở đây (bảng thử nghiệm bên dưới), nên mọi baseline dùng Adam, lr 1e-3 — như bài báo dùng khi huấn luyện mô hình — với số epoch và lịch giảm lr mặc định của PyCIL cho từng phương pháp (lr ở session tăng dần được giảm theo đúng tỉ lệ PyCIL dùng)."]));
+children.push(bullet([b("Optimizer: "), "bài báo không nêu siêu tham số của baseline. Mặc định của PyCIL (SGD, lr 0,1) được thiết kế cho CNN trên CIFAR và không hội tụ với ViT ở đây (bảng thử nghiệm bên dưới), nên mọi baseline dùng Adam, lr 1e-3, batch 32 — đúng cấu hình huấn luyện bài báo nêu (\"Adam optimizer, initial learning rate 0.001, batch size 32\") — với số epoch và lịch giảm lr mặc định của PyCIL cho từng phương pháp (lr ở session tăng dần được giảm theo đúng tỉ lệ PyCIL dùng)."]));
 children.push(bullet([b("Cách phân loại: "), "bảng chính dùng lớp fc (PyCIL gọi là \"CNN\"), là số PyCIL báo cáo mặc định; bảng NME trình bày riêng. Với FOSTER, PyCIL đánh giá mạng teacher (hai backbone) sau mỗi session; mạng student đã nén chỉ dùng từ session sau — giữ nguyên như PyCIL."]));
 children.push(bullet([b("Ours: "), "kết quả seed 0 của phương pháp đề xuất (mục 7), cách phân loại theo mã gốc (NME ở Base, fc ở các session sau). Tham số học ≈ 0,85M ở các session tăng dần."]));
 if (pilotSgd) {
-  const pa = baselineRun("icarl", "houston");
-  children.push(caption("Chọn optimizer cho baseline: iCaRL, Houston 2013, seed 0 (OA / AA / Kappa, fc)", "không có trong bài báo"));
+  const paF = path.join(BASELINE_DIR, "icarl_adam_e1_houston_seed0.json"); // same batch 128 as the SGD pilot
+  const pa = fs.existsSync(paF) ? JSON.parse(fs.readFileSync(paF)) : null;
+  children.push(caption("Chọn optimizer cho baseline: iCaRL, Houston 2013, seed 0, batch 128 (OA / AA / Kappa, fc)", "không có trong bài báo"));
   children.push(table(["Session", "SGD lr 0,1 (mặc định PyCIL)", "Adam lr 1e-3 (đã chọn)", "Bài báo (iCaRL)"],
     pilotSgd.sessions.map((s, k) => [sname(k), `${f2(s.OA)} / ${f2(s.AA)} / ${f2(s.Kappa)}`,
       pa ? `${f2(pa.sessions[k].OA)} / ${f2(pa.sessions[k].AA)} / ${f2(pa.sessions[k].Kappa)}` : "…",
       `${f2(PAPER_T4.icarl.houston[k].OA)} / ${f2(PAPER_T4.icarl.houston[k].AA)} / ${f2(PAPER_T4.icarl.houston[k].K)}`]),
     [1.3, 2.6, 2.6, 2.6]));
+}
+{
+  const b128 = (m, ds) => { const f = path.join(BASELINE_DIR, `${m}_adam_e1_${ds}_seed0.json`); return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f)) : null; };
+  const r128 = b128("lwf", "augsburg"), r32 = baselineRun("lwf", "augsburg");
+  children.push(p([b("Batch size: "), "lần chạy đầu dùng batch 128 mặc định của PyCIL. Trên Augsburg, session base chỉ có 450 mẫu train (4 bước cập nhật/epoch) nên mô hình học chưa đủ: LwF đạt OA base 69,70 % (độ chính xác train 79 %), so với 91,92 % trong bài báo. Chuyển sang batch 32 như bài báo nêu, OA base tăng lên 86,33 %. Vì vậy toàn bộ baseline được chạy lại với batch 32; kết quả batch 128 (Houston: LwF, iCaRL, PodNet, WA, FOSTER; Augsburg: LwF) được giữ trong results/baselines/*_adam_e1_*.json để đối chiếu."]));
+  if (r128) {
+    children.push(caption("Ảnh hưởng của batch size: LwF, Augsburg, seed 0 (OA / AA / Kappa)", "không có trong bài báo"));
+    children.push(table(["Session", "Batch 128", "Batch 32", "Bài báo (LwF)"], r128.sessions.map((s, k) => [sname(k),
+      `${f2(s.OA)} / ${f2(s.AA)} / ${f2(s.Kappa)}`,
+      r32 && r32.sessions[k] ? `${f2(r32.sessions[k].OA)} / ${f2(r32.sessions[k].AA)} / ${f2(r32.sessions[k].Kappa)}` : "…",
+      `${f2(PAPER_T4.lwf.augsburg[k].OA)} / ${f2(PAPER_T4.lwf.augsburg[k].AA)} / ${f2(PAPER_T4.lwf.augsburg[k].K)}`]), [1.3, 2.6, 2.6, 2.6]));
+  }
 }
 const part1b = children.splice(0);
 

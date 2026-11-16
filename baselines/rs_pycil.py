@@ -167,6 +167,12 @@ def apply_overrides(module, args: dict, opts) -> dict:
         if key in args and scale != 1:
             args[key] = max(1, round(args[key] * scale))
             changed[key] = args[key]
+    if opts.batch_size:
+        if hasattr(module, "batch_size"):
+            module.batch_size = opts.batch_size
+        if "batch_size" in args:
+            args["batch_size"] = opts.batch_size
+        changed["batch_size"] = opts.batch_size
     if hasattr(module, "num_workers"):
         module.num_workers = opts.num_workers
     if opts.optimizer == "adam":
@@ -196,6 +202,7 @@ def main() -> None:
     parser.add_argument("--adam-lr", type=float, default=1e-3, help="Adam lr used where PyCIL uses 0.1")
     parser.add_argument("--epochs-scale", type=float, default=1.0, help="multiply all PyCIL epoch counts")
     parser.add_argument("--num-workers", type=int, default=2)
+    parser.add_argument("--batch-size", type=int, help="override PyCIL batch size (paper: 32)")
     parser.add_argument("--output", type=Path)
     opts = parser.parse_args()
 
@@ -280,6 +287,8 @@ def main() -> None:
                "average": {k: float(np.mean([s[k] for s in sessions])) for k in ("OA", "AA", "Kappa")},
                "total_seconds": round(time.time() - start_all, 1)}
     tag = "" if opts.optimizer == "sgd" and opts.epochs_scale == 1 else f"_{opts.optimizer}_e{opts.epochs_scale:g}"
+    if opts.batch_size:
+        tag += f"_b{opts.batch_size}"
     output = opts.output or MY_CIL / "results" / "baselines" / f"{opts.method}{tag}_{opts.dataset}_seed{opts.seed}.json"
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(summary, indent=2))
