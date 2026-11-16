@@ -1,0 +1,8 @@
+# Paper (IEEE copyright) and data
+*.pdf
+data_houston/
+*.mat
+*.npy
+*.pth
+__pycache__/
+*.egg-info/
