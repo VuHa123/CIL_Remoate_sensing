@@ -10,3 +10,4 @@ results/
 data_muufl/
 data_augsburg/
 *.zip
+baselines/PyCIL/
