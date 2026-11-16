@@ -146,6 +146,9 @@ class OptimShim:
         self.lr_scheduler = torch.optim.lr_scheduler
 
     def SGD(self, params, lr, momentum=0.9, weight_decay=0.0, **_):  # noqa: N802
+        params = list(params)
+        if params and isinstance(params[0], dict):  # param groups with their own lr (PodNet)
+            params = [{**g, "lr": g["lr"] * self.lr_scale} if "lr" in g else g for g in params]
         return torch.optim.Adam(params, lr=lr * self.lr_scale, weight_decay=weight_decay)
 
     def __getattr__(self, item):
