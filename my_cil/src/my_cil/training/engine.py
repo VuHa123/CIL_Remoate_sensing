@@ -91,9 +91,10 @@ def freeze_tokens(prompt_tokens, similarity, threshold=0.5):
 class MyCilTrainNet(nn.Module):
     def __init__(self, num_group_tokens, group_feature_size, feature_size, num_classes,
                  hsi_channels=144, batch_size=16, init_lr=0.0001, base_lr=None,
-                 fix_optimizer=False):
+                 fix_optimizer=False, aux_channels=1):
         """
         hsi_channels: number of HSI channels (144 raw, 40 after PCA as in the paper).
+        aux_channels: channels of the second modality (1 for LiDAR, 4 for SAR).
         base_lr: learning rate of the base session (default: init_lr).
         fix_optimizer: if True, rebuild Adam/scheduler at every session over the
             parameters that are actually trainable in that session (new fc, new
@@ -147,7 +148,7 @@ class MyCilTrainNet(nn.Module):
                                                 prompt_length=5, batchwise_prompt=True, prompt_key_init='uniform',
                                                 prompt_pool=True).to(device)
 
-        self.Prompt_Net_modality_2 = ViT_Prompt(image_size=11, patch_size=1, in_channels=1, embed_dim=128,
+        self.Prompt_Net_modality_2 = ViT_Prompt(image_size=11, patch_size=1, in_channels=aux_channels, embed_dim=128,
                                                 num_classes=15, depth=4, num_heads=4, drop_rate=0.1, pool_size=30,
                                                 embedding_key='mean_max', prompt_init='uniform', top_k=3,
                                                 prompt_length=5, batchwise_prompt=True, prompt_key_init='uniform',

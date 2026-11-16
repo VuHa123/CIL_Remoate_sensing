@@ -1,4 +1,4 @@
-"""Class-incremental run on Houston 2013 with OA / AA / Kappa / APD per session.
+"""Class-incremental run on Houston 2013 / MUUFL / Augsburg with OA / AA / Kappa / APD per session.
 
 Presets
 -------
@@ -43,10 +43,19 @@ PRESETS = {
                   base_batch=32, inc_batch=16, fix_optimizer=True),
 }
 
+# Class split / memory per dataset (paper Tables I-III, Sec. IV-B: K chosen so the
+# last session stores 2 / 3 / 5 exemplars per class). Only used with --preset paper.
+DATASETS = {
+    "houston": dict(base_classes=6, increment=3, total_classes=15, memory=30),
+    "muufl": dict(base_classes=5, increment=2, total_classes=11, memory=33),
+    "augsburg": dict(base_classes=3, increment=2, total_classes=7, memory=35),
+}
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--preset", choices=PRESETS, default="paper")
+    parser.add_argument("--dataset", choices=DATASETS, default="houston")
     parser.add_argument("--data-dir", type=Path, default=Path("data_houston"))
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--output", type=Path, help="JSON result file (default: results/<preset>_seed<seed>.json)")
@@ -66,6 +75,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--inc-batch", type=int)
     parser.add_argument("--fix-optimizer", action=on_off)
     args = parser.parse_args()
+    if args.preset == "paper":
+        for key, value in DATASETS[args.dataset].items():
+            if getattr(args, key) is None:
+                setattr(args, key, value)
     for key, value in PRESETS[args.preset].items():
         if getattr(args, key) is None:
             setattr(args, key, value)
@@ -134,12 +147,14 @@ def main() -> None:
     sample = np.load(args.data_dir / "train_patches.npy", mmap_mode="r")
     total_channels = sample.shape[-1]
     hsi_channels = json.loads(meta_path.read_text())["hsi_channels"] if meta_path.exists() else total_channels - 1
-    print(f"data: {args.data_dir} channels={total_channels} (HSI {hsi_channels})")
+    aux_channels = total_channels - hsi_channels
+    print(f"data: {args.data_dir} channels={total_channels} (HSI {hsi_channels}, aux {aux_channels})")
     print("config:", {k: str(v) for k, v in vars(args).items()})
 
     model = MyCilTrainNet(num_group_tokens=3, group_feature_size=128, feature_size=128, num_classes=0,
                           hsi_channels=hsi_channels, batch_size=args.base_batch, init_lr=args.inc_lr,
-                          base_lr=args.base_lr, fix_optimizer=args.fix_optimizer)
+                          base_lr=args.base_lr, fix_optimizer=args.fix_optimizer,
+                          aux_channels=aux_channels)
 
     boundaries = [args.base_classes]
     while boundaries[-1] < args.total_classes:
@@ -194,11 +209,13 @@ def main() -> None:
     summary = {
         "config": {k: str(v) for k, v in vars(args).items()},
         "hsi_channels": hsi_channels,
+        "aux_channels": aux_channels,
         "sessions": sessions,
         "average": {k: float(np.mean([s[k] for s in sessions])) for k in ("OA", "AA", "Kappa")},
         "total_seconds": round(time.time() - start_all, 1),
     }
-    output = args.output or Path("results") / f"{args.preset}_seed{args.seed}.json"
+    output = args.output or Path("results") / (f"{args.preset}_seed{args.seed}.json" if args.dataset == "houston"
+                                             else f"{args.dataset}_{args.preset}_seed{args.seed}.json")
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(summary, indent=2))
     print("\nsession  OA     AA     Kappa  APD")

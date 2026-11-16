@@ -7,3 +7,6 @@ data_houston/
 __pycache__/
 *.egg-info/
 results/
+data_muufl/
+data_augsburg/
+*.zip
