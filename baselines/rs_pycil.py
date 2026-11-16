@@ -211,6 +211,13 @@ def main() -> None:
     inc_net.get_convnet = lambda args, pretrained=False: (
         TwoBranchViT(hsi_channels, aux_channels) if args["convnet_type"] == "rs_vit" else original_get_convnet(args, pretrained))
     BaseLearner._compute_accuracy = lambda self, model, loader: -1.0  # only logged by PyCIL; skip (slow on big test sets)
+    _orig_evaluate = BaseLearner._evaluate
+
+    def _evaluate_top5_alias(self, y_pred, y_true):  # FOSTER logs ret["top5"]; we run with topk=1
+        ret = _orig_evaluate(self, y_pred, y_true)
+        ret.setdefault("top5", ret["top{}".format(self.topk)])
+        return ret
+    BaseLearner._evaluate = _evaluate_top5_alias
 
     args = {"prefix": "rs", "dataset": f"rs_{opts.dataset}", "memory_size": ds["memory"], "memory_per_class": 20,
             "fixed_memory": False, "shuffle": False, "init_cls": ds["init_cls"], "increment": ds["increment"],
