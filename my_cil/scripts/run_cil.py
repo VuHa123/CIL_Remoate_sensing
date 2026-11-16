@@ -74,6 +74,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--base-batch", type=int)
     parser.add_argument("--inc-batch", type=int)
     parser.add_argument("--fix-optimizer", action=on_off)
+    parser.add_argument("--eval", choices=("code", "fc", "nme"), default="code",
+                        help="classifier for the main metrics: 'code' = NME at base, fc afterwards (original "
+                             "script); fc and NME metrics (incl. APD) are always recorded as well")
     args = parser.parse_args()
     if args.preset == "paper":
         for key, value in DATASETS[args.dataset].items():
@@ -160,7 +163,8 @@ def main() -> None:
     while boundaries[-1] < args.total_classes:
         boundaries.append(min(boundaries[-1] + args.increment, args.total_classes))
 
-    sessions, correct_list, total_list = [], [], []
+    sessions, total_list = [], []
+    correct = {"primary": [], "fc": [], "nme": []}
     start_all = time.time()
     n_old = 0
     for stage, n_seen in enumerate(boundaries):
@@ -187,18 +191,26 @@ def main() -> None:
         model.compute_means = True
         nme_preds, labels = predict(model, loader, hsi_channels, True, device)
         fc_preds, _ = predict(model, loader, hsi_channels, False, device)
-        primary = nme_preds if stage == 0 else fc_preds
+        if args.eval == "code":
+            primary = nme_preds if stage == 0 else fc_preds
+        else:
+            primary = nme_preds if args.eval == "nme" else fc_preds
         result = {"session": stage, "seen_classes": n_seen, "m": m, "seconds": round(time.time() - start, 1),
                   **metrics(primary, labels),
                   "fc": metrics(fc_preds, labels), "nme": metrics(nme_preds, labels)}
         for extra in ("fc", "nme"):
-            for key in ("confusion", "per_class_acc"):
-                result[extra].pop(key)
+            result[extra].pop("confusion")
 
-        correct_list.append({c: int(((primary == c) & (labels == c)).sum()) for c in np.unique(labels).tolist()})
-        total_list.append({c: int((labels == c).sum()) for c in np.unique(labels).tolist()})
+        classes_seen = np.unique(labels).tolist()
+        for name, preds in (("primary", primary), ("fc", fc_preds), ("nme", nme_preds)):
+            correct[name].append({c: int(((preds == c) & (labels == c)).sum()) for c in classes_seen})
+        total_list.append({c: int((labels == c).sum()) for c in classes_seen})
         if stage > 0:
-            result["APD"] = calculate_forgetting_rate(convert_to_stage_stats(correct_list, total_list))[-1]
+            apd = {name: calculate_forgetting_rate(convert_to_stage_stats(correct[name], total_list))[-1]
+                   for name in correct}
+            result["APD"] = apd["primary"]
+            result["fc"]["APD"] = apd["fc"]
+            result["nme"]["APD"] = apd["nme"]
         sessions.append(result)
         print(f"session {stage}: OA {result['OA']:.2f} AA {result['AA']:.2f} Kappa {result['Kappa']:.2f}"
               + (f" APD {result['APD']:.4f}" if stage else "")
