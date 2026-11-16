@@ -8,8 +8,10 @@ Sources
 -------
 muufl    : GatorSense/MUUFLGulfport, MUUFLGulfportSceneLabels/
            muufl_gulfport_campus_1_hsi_220_label.mat (HSI 325x220x64, labels 1..11,
-           -1 = unlabelled). LiDAR: first raster of hsi.Lidar{1}.z (the paper
-           uses a single LiDAR channel).
+           -1 = unlabelled). hsi.Lidar holds two LiDAR rasters (first return,
+           last return), each with 2 bands (DEM elevation, intensity). Default
+           --muufl-lidar first_dem (the paper uses a single LiDAR channel);
+           other choices are kept for comparison.
 augsburg : songyz2019/rs-fusion-datasets-dist v1.0.0 augsburg-ouc.zip
            (augsburg_hsi 332x485x180, augsburg_sar 332x485x4, augsburg_gt 1..7).
            Labels are reordered to the paper's Table III order
@@ -35,16 +37,25 @@ from scripts.prepare_houston import apply_pca, class_counts, normalize_channels
 TRAIN_PER_CLASS = {"muufl": 100, "augsburg": 150}
 
 
-def load_muufl(raw_dir: Path):
+MUUFL_LIDAR = {  # (raster index in hsi.Lidar, band index)
+    "first_dem": [(0, 0)],
+    "last_dem": [(1, 0)],
+    "first_last_dem": [(0, 0), (1, 0)],
+    "all4": [(0, 0), (0, 1), (1, 0), (1, 1)],
+}
+
+
+def load_muufl(raw_dir: Path, lidar_choice: str = "first_dem"):
     hsi = sio.loadmat(raw_dir / "muufl_gulfport_campus_1_hsi_220_label.mat",
                       squeeze_me=True, struct_as_record=False)["hsi"]
     labels = np.asarray(hsi.sceneLabels.labels).astype(np.int64)
     labels[labels < 0] = 0
-    lidar = np.asarray(hsi.Lidar[0].z, dtype=np.float32)[..., :1]
+    lidar = np.stack([np.asarray(hsi.Lidar[r].z, dtype=np.float32)[..., b]
+                      for r, b in MUUFL_LIDAR[lidar_choice]], axis=2)
     return np.asarray(hsi.Data, dtype=np.float32), lidar, labels
 
 
-def load_augsburg(raw_dir: Path):
+def load_augsburg(raw_dir: Path, _unused=None):
     folder = raw_dir / "Augsburg"
     hsi = sio.loadmat(folder / "augsburg_hsi.mat")["augsburg_hsi"].astype(np.float32)
     sar = sio.loadmat(folder / "augsburg_sar.mat")["augsburg_sar"].astype(np.float32)
@@ -62,10 +73,11 @@ def main() -> None:
     parser.add_argument("--train-per-class", type=int)
     parser.add_argument("--window-size", type=int, default=11)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--muufl-lidar", choices=MUUFL_LIDAR, default="first_dem")
     args = parser.parse_args()
     per_class = args.train_per_class or TRAIN_PER_CLASS[args.dataset]
 
-    hsi, aux, gt = (load_muufl if args.dataset == "muufl" else load_augsburg)(args.raw_dir)
+    hsi, aux, gt = (load_muufl if args.dataset == "muufl" else load_augsburg)(args.raw_dir, args.muufl_lidar)
     print(f"HSI {hsi.shape}, aux {aux.shape}, labelled {int((gt > 0).sum())}")
     if args.pca:
         hsi = apply_pca(hsi, args.pca)
