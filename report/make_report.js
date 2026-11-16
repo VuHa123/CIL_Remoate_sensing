@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, ShadingType,
-  AlignmentType, HeadingLevel, LevelFormat, BorderStyle, PageNumber, Footer,
+  AlignmentType, HeadingLevel, LevelFormat, BorderStyle, PageNumber, Footer, PageOrientation,
 } = require("docx");
 
 const ROOT = path.join(__dirname, "..", "my_cil");
@@ -77,6 +77,59 @@ const LIDAR_VARIANTS = [
   const f = path.join(RESULTS, file + ".json");
   return { k, label, ch, run: fs.existsSync(f) ? JSON.parse(fs.readFileSync(f)) : null };
 });
+
+// ---------- Table IV (all methods) ----------
+// Paper Table IV transcribed from page 7084: per dataset, per session [APD, OA, AA, Kappa].
+const T4_METHODS = [
+  { key: "lwf", name: "LwF" }, { key: "icarl", name: "iCaRL" }, { key: "podnet", name: "PodNet" },
+  { key: "wa", name: "WA" }, { key: "beef", name: "BEEF" }, { key: "foster", name: "FOSTER" }, { key: "ours", name: "Ours (BiCM-Prompt)" },
+];
+const P = (apd, oa, aa, k) => ({ APD: apd, OA: oa, AA: aa, K: k });
+const PAPER_T4 = {
+  lwf: {
+    houston: [P(null, 95.52, 96.25, 94.63), P(0.5696, 50.87, 50.27, 44.69), P(0.3152, 32.67, 32.21, 26.07), P(0.1504, 22.77, 22.57, 16.13)],
+    muufl: [P(null, 90.13, 87.67, 83.30), P(0.6689, 63.32, 35.31, 34.88), P(0.2152, 52.42, 20.44, 19.28), P(0.0982, 42.95, 21.65, 37.49)],
+    augsburg: [P(null, 91.92, 93.15, 86.98), P(0.7537, 89.09, 49.60, 70.10), P(0.0649, 67.53, 45.27, 53.48)],
+  },
+  icarl: {
+    houston: [P(null, 96.30, 97.13, 95.40), P(0.1307, 89.37, 88.09, 87.84), P(0.1640, 75.33, 76.53, 72.89), P(0.1264, 65.28, 71.10, 62.78)],
+    muufl: [P(null, 92.33, 93.81, 92.13), P(0.4560, 76.38, 62.80, 65.35), P(0.1527, 64.08, 58.59, 54.98), P(0.1130, 72.69, 56.44, 64.31)],
+    augsburg: [P(null, 84.32, 86.93, 75.50), P(0.5299, 90.15, 59.74, 72.94), P(0.2878, 60.69, 48.25, 46.29)],
+  },
+  podnet: {
+    houston: [P(null, 97.77, 98.19, 97.32), P(0.0645, 75.27, 77.14, 72.28), P(0.0285, 59.59, 60.49, 56.08), P(0.0032, 58.05, 62.74, 55.00)],
+    muufl: [P(null, 95.61, 97.04, 92.40), P(0.2983, 81.90, 73.98, 75.42), P(0.1347, 70.52, 62.02, 63.99), P(0.1300, 54.19, 47.70, 45.44)],
+    augsburg: [P(null, 91.81, 93.04, 86.78), P(0.5141, 67.22, 57.86, 40.28), P(0.1106, 44.29, 51.41, 32.08)],
+  },
+  wa: {
+    houston: [P(null, 94.54, 95.52, 93.46), P(0.1731, 85.26, 84.46, 83.41), P(0.2860, 63.01, 65.53, 59.70), P(0.1463, 50.14, 57.45, 46.78)],
+    muufl: [P(null, 94.74, 96.84, 91.00), P(0.5048, 78.13, 61.66, 68.22), P(0.2317, 55.20, 51.63, 43.28), P(0.2199, 59.96, 41.79, 45.76)],
+    augsburg: [P(null, 93.65, 94.47, 89.74), P(0.6569, 88.72, 56.11, 68.26), P(0.3432, 59.49, 43.49, 42.79)],
+  },
+  beef: {
+    houston: [P(null, 98.15, 98.50, 97.79), P(0.2147, 76.55, 77.77, 73.69), P(0.1528, 57.72, 62.57, 53.78), P(0.0801, 60.80, 67.72, 57.99)],
+    muufl: [P(null, 95.53, 97.19, 92.30), P(0.1998, 55.08, 65.41, 43.96), P(0.1169, 43.44, 52.73, 32.79), P(0.0752, 49.95, 43.96, 37.52)],
+    augsburg: [P(null, 91.04, 92.14, 85.51), P(0.5782, 90.55, 59.32, 73.72), P(0.1766, 73.25, 55.09, 62.01)],
+  },
+  foster: {
+    houston: [P(null, 99.60, 99.67, 99.51), P(0.0067, 94.42, 95.15, 93.73), P(0.1358, 68.28, 70.90, 65.33), P(0.0335, 67.46, 71.85, 64.89)],
+    muufl: [P(null, 95.99, 97.33, 93.06), P(0.0533, 84.57, 89.81, 79.31), P(0.2359, 64.16, 70.36, 57.58), P(0.0445, 70.30, 66.34, 64.40)],
+    augsburg: [P(null, 92.16, 93.32, 87.34), P(0.1929, 81.23, 71.72, 57.56), P(0.1800, 58.88, 60.97, 46.22)],
+  },
+  ours: {
+    houston: [P(null, 96.96, 97.55, 96.35), P(0.0528, 93.14, 94.09, 92.28), P(0.1142, 82.85, 85.13, 81.26), P(0.0576, 77.39, 82.09, 75.56)],
+    muufl: [P(null, 95.45, 97.70, 92.19), P(0.3510, 77.96, 73.10, 68.02), P(0.0807, 69.96, 72.16, 62.92), P(0.1003, 73.97, 67.02, 65.46)],
+    augsburg: [P(null, 92.83, 93.82, 88.43), P(0.3748, 85.99, 67.48, 65.83), P(0.2431, 75.87, 58.73, 66.45)],
+  },
+};
+const BASELINE_DIR = path.join(RESULTS, "baselines");
+const T4_SEED = "0";
+const baselineRun = (m, ds) => {
+  const f = path.join(BASELINE_DIR, `${m}_adam_e1_${ds}_seed${T4_SEED}.json`);
+  return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f)) : null;
+};
+const pilotSgd = fs.existsSync(path.join(BASELINE_DIR, "icarl_houston_seed0.json"))
+  ? JSON.parse(fs.readFileSync(path.join(BASELINE_DIR, "icarl_houston_seed0.json"))) : null;
 
 const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
 const std = (a) => (a.length < 2 ? 0 : Math.sqrt(a.reduce((s, x) => s + (x - mean(a)) ** 2, 0) / (a.length - 1)));
@@ -154,12 +207,12 @@ children.push(new Paragraph({
 children.push(p([i("BiCM-Prompt: Bidirectional Cross-Modal Prompt Tuning for Class-Incremental Learning on Multisource Remote Sensing Images")], { align: AlignmentType.CENTER }));
 children.push(p("Y. Zou, J. Qu, W. Dong, Y. Li — IEEE Transactions on Image Processing, vol. 35, 2026. DOI: 10.1109/TIP.2026.3706299", { align: AlignmentType.CENTER }));
 const done = DATASETS.filter((d) => d.runs.length).map((d) => `${d.title} (${d.runs.length} seed)`).join(", ");
-children.push(p(`Ngày cập nhật: ${new Date().toISOString().slice(0, 10)} — Phạm vi: phương pháp đề xuất ("Ours") trên ${done}`, { align: AlignmentType.CENTER }));
+children.push(p(`Ngày cập nhật: ${new Date().toISOString().slice(0, 10)} — Phạm vi: phương pháp đề xuất ("Ours") trên ${done}; baseline PyCIL seed 0`, { align: AlignmentType.CENTER }));
 
 // 1
 children.push(h1("1. Mục tiêu và phạm vi"));
 children.push(p("Mục tiêu là chạy lại toàn bộ quy trình của bài báo, từ dữ liệu gốc → tiền xử lý → huấn luyện tăng dần → đánh giá, bằng mã nguồn công khai của tác giả, sau đó so sánh với số liệu của bài báo."));
-children.push(p("Thứ tự thực hiện: (1) phương pháp đề xuất trên cả ba bộ dữ liệu của bài báo — dòng \"Ours\" của Table IV (phần đã xong, trình bày trong báo cáo này); (2) sáu baseline có replay của Table IV qua PyCIL; (3) DualPrompt và Adam-adapter (Table V); (4) ablation (Table VI) và các phân tích khác."));
+children.push(p("Thứ tự thực hiện: (1) phương pháp đề xuất trên cả ba bộ dữ liệu của bài báo — dòng \"Ours\" của Table IV (đã xong, 3 seed); (2) sáu baseline có replay của Table IV qua PyCIL (đang chạy, seed 0 trước; mục 6); (3) DualPrompt và Adam-adapter (Table V); (4) ablation (Table VI) và các phân tích khác."));
 children.push(p([b("Cách đọc số bảng: "), "các bảng trong báo cáo được đánh số riêng (Bảng 1, 2, …). Cuối mỗi tiêu đề bảng có ghi trong ngoặc vuông bảng tương ứng của bài báo, hoặc \"không có trong bài báo\" nếu đó là phân tích bổ sung của người tái lập."]));
 
 // 2
@@ -203,7 +256,7 @@ children.push(bullet("Cắt patch 11 × 11 quanh mỗi pixel có nhãn."));
 children.push(bullet("Chọn ngẫu nhiên số pixel train mỗi lớp theo Table I–III (Houston 180, MUUFL 100, Augsburg 150), phần còn lại làm test. Seed của phép chia = seed của lần chạy (0, 1, 2)."));
 children.push(bullet([b("Houston: "), "gộp nhãn train + test của bộ DFC2013 (2 832 + 12 197 pixel) trước khi chia lại."]));
 children.push(bullet([b("Augsburg: "), "thứ tự lớp trong file (Forest, Residential, Industrial, Low Plants, Allotment, Commercial, Water) được đảo lại cho đúng thứ tự của Table III."]));
-children.push(bullet([b("MUUFL — LiDAR: "), "file có 2 ảnh LiDAR (first return, last return), mỗi ảnh có 2 band (độ cao DEM, cường độ) = 4 kênh. Bài báo ghi LiDAR 11×11×1 nhưng không nói kênh nào; mặc định dùng độ cao first return. Ba lựa chọn khác được chạy thêm để so sánh (mục 6.4)."]));
+children.push(bullet([b("MUUFL — LiDAR: "), "file có 2 ảnh LiDAR (first return, last return), mỗi ảnh có 2 band (độ cao DEM, cường độ) = 4 kênh. Bài báo ghi LiDAR 11×11×1 nhưng không nói kênh nào; mặc định dùng độ cao first return. Ba lựa chọn khác được chạy thêm để so sánh (mục 7.4)."]));
 children.push(bullet([b("MUUFL — tập test: "), "bài báo ghi 44 700 mẫu test, ít hơn số pixel còn lại sau khi lấy train (52 587, khoảng 85 %) ở mọi lớp, và không nói cách lọc. Tái lập dùng toàn bộ 52 587 pixel."]));
 
 for (const d of DATASETS) {
@@ -251,12 +304,139 @@ children.push(bullet([b("Bài báo có nhắc đến NME không: "), "không. Ph
 children.push(bullet("APD theo công thức (20) của bài báo, trùng với hàm calculate_forgetting_rate của mã."));
 children.push(bullet("Mỗi bộ dữ liệu chạy 3 seed (0, 1, 2), mỗi seed dùng một phép chia train/test ngẫu nhiên khác nhau."));
 
-// 6
-children.push(h1("6. Kết quả phương pháp đề xuất"));
+// 6 — Table IV replica (landscape section)
+const part1 = children.splice(0);
+const LAND_W = 16838 - 2 * MARGIN;
+const DS_KEYS = ["houston", "muufl", "augsburg"];
+const dsByKey = Object.fromEntries(DATASETS.map((d) => [d.key, d]));
+const T4_HEAD = { houston: "Houston2013 (2 mẫu/lớp)", muufl: "MUUFL (3 mẫu/lớp)", augsburg: "Augsburg (5 mẫu/lớp)" };
+const METRICS = ["APD", "OA", "AA", "K"];
+
+// cell value for the reproduction: kind = "main" (PyCIL "CNN"/fc; Ours: classifier of the code) or "nme"
+function reproCell(m, ds, s, kind = "main") {
+  let sess;
+  if (m === "ours") {
+    const r = dsByKey[ds].runs.find((x) => x.seed === T4_SEED);
+    sess = r && r.sessions[s];
+  } else {
+    const r = baselineRun(m, ds);
+    sess = r && r.sessions[s];
+  }
+  if (!sess) return null;
+  const src = kind === "nme" ? sess.nme : sess;
+  if (!src || src.OA === undefined || src.OA === null) return kind === "nme" ? P(null, null, null, null) : null;
+  return P(s === 0 ? null : (src.APD === undefined ? null : src.APD), src.OA, src.AA, src.Kappa);
+}
+const paperCell = (m, ds, s) => (PAPER_T4[m][ds][s] || null);
+const diffCell = (m, ds, s) => {
+  const a = reproCell(m, ds, s), pp = paperCell(m, ds, s);
+  if (!a || !pp) return null;
+  return P(s === 0 ? null : a.APD - pp.APD, a.OA - pp.OA, a.AA - pp.AA, a.K - pp.K);
+};
+const paramsRepro = (m) => {
+  if (m === "ours") return "≈0,85M";
+  for (const ds of DS_KEYS) { const r = baselineRun(m, ds); if (r) return `${r.sessions[0].trainable_params_M.toFixed(2)}M`; }
+  return "…";
+};
+const paramsPaper = (m) => (m === "ours" ? "0.843M" : "2.445M");
+
+function t4Table(getCell, { params, signed = false, bold = true, missing = "…" }) {
+  const rel = [1.5, 0.9, 1.0, ...Array(12).fill(0.85)];
+  const tot = rel.reduce((a, c) => a + c, 0);
+  const w = rel.map((x) => Math.floor((x / tot) * LAND_W));
+  w[w.length - 1] += LAND_W - w.reduce((a, c) => a + c, 0);
+  const SZ = 16;
+  const mk = (text, width, o = {}) => new TableCell({
+    borders, width: { size: width, type: WidthType.DXA }, columnSpan: o.colSpan, rowSpan: o.rowSpan,
+    verticalAlign: "center", margins: { top: 30, bottom: 30, left: 40, right: 40 },
+    shading: o.head ? { type: ShadingType.CLEAR, fill: "D9E2F3", color: "auto" } : o.fill ? { type: ShadingType.CLEAR, fill: o.fill, color: "auto" } : undefined,
+    children: [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0 }, children: [new TextRun({ text: String(text), bold: o.head || o.bold, size: SZ })] })],
+  });
+  const fmt = (v, metric) => {
+    if (v === null || v === undefined || Number.isNaN(v)) return null;
+    const t = metric === "APD" ? v.toFixed(4) : v.toFixed(2);
+    return signed && v > 0 ? `+${t}` : t;
+  };
+  // best value per (dataset, session, metric) among methods with a value (OA/AA/K: max), as in the paper
+  const best = {};
+  if (bold) for (const ds of DS_KEYS) for (let s = 0; s < 4; s++) for (const k of ["OA", "AA", "K"]) {
+    const vals = T4_METHODS.map((mm) => getCell(mm.key, ds, s)).filter(Boolean).map((c) => c[k]);
+    if (vals.length > 1) best[`${ds}${s}${k}`] = Math.max(...vals);
+  }
+  const head1 = new TableRow({ tableHeader: true, children: [
+    mk("Phương pháp", w[0], { head: true, rowSpan: 2 }), mk("Tham số học", w[1], { head: true, rowSpan: 2 }), mk("Session", w[2], { head: true, rowSpan: 2 }),
+    ...DS_KEYS.map((ds, j) => mk(T4_HEAD[ds], w[3 + 4 * j] * 4, { head: true, colSpan: 4 }))] });
+  const head2 = new TableRow({ tableHeader: true, children: DS_KEYS.flatMap((ds, j) => ["APD", "OA", "AA", "Kappa"].map((h, q) => mk(h, w[3 + 4 * j + q], { head: true }))) });
+  const rows = [head1, head2];
+  for (const mm of T4_METHODS) {
+    const fill = mm.key === "ours" ? "F2F2F2" : undefined;
+    for (let s = 0; s < 4; s++) {
+      const cells = [];
+      if (s === 0) {
+        cells.push(mk(mm.name, w[0], { rowSpan: 4, bold: mm.key === "ours", fill }));
+        cells.push(mk(params(mm.key), w[1], { rowSpan: 4, fill }));
+      }
+      cells.push(mk(s === 0 ? "Base" : `Session${s}`, w[2], { fill }));
+      DS_KEYS.forEach((ds, j) => {
+        const nS = dsByKey[ds].paper.length;
+        const c = s < nS ? getCell(mm.key, ds, s) : null;
+        METRICS.forEach((k, q) => {
+          let text;
+          if (s >= nS || (k === "APD" && s === 0)) text = "-";
+          else if (!c) text = missing;
+          else { const t = fmt(c[k], k); text = t === null ? "-" : t; }
+          const isBest = bold && c && k !== "APD" && best[`${ds}${s}${k}`] !== undefined && c[k] === best[`${ds}${s}${k}`];
+          cells.push(mk(text, w[3 + 4 * j + q], { bold: isBest, fill }));
+        });
+      });
+      rows.push(new TableRow({ cantSplit: true, children: cells }));
+    }
+  }
+  return new Table({ width: { size: LAND_W, type: WidthType.DXA }, columnWidths: w, rows });
+}
+
+const nDone = T4_METHODS.filter((mm) => mm.key !== "ours").reduce((a, mm) => a + DS_KEYS.filter((ds) => baselineRun(mm.key, ds)).length, 0);
+children.push(h1("6. So sánh với Table IV: sáu baseline và phương pháp đề xuất trên ba bộ dữ liệu"));
+children.push(p(`Bảng dưới đây có cùng bố cục với Table IV của bài báo: mỗi phương pháp một khối dòng (Base, Session1–3), mỗi bộ dữ liệu bốn cột APD / OA / AA / Kappa. Đây là kết quả tham chiếu với một seed (seed ${T4_SEED}) cho mọi phương pháp; phương pháp đề xuất đã có 3 seed (mục 7). Ô "…" là lần chạy chưa xong (hiện có ${nDone}/18 lần chạy baseline). Chữ đậm: giá trị cao nhất trong cột ở mỗi session (như bài báo, không đánh dấu APD).`));
+children.push(h2("6.1. Cách chạy các baseline"));
+children.push(bullet([b("Khung mã: "), "PyCIL (github.com/G-U-N/PyCIL, commit f3509b8, giấy phép MIT) — bài báo ghi các baseline được cài đặt trong PyCIL. Mã PyCIL giữ nguyên; script ", code("baselines/rs_pycil.py"), " nạp dữ liệu viễn thám, backbone và cách tính chỉ số vào PyCIL."]));
+children.push(bullet([b("Dữ liệu: "), "đúng các phép chia và thứ tự lớp đã dùng cho phương pháp đề xuất (data_<bộ>/paper_seed0)."]));
+children.push(bullet([b("Backbone: "), "bài báo chỉ nói các baseline \"dùng chung kiến trúc ViT\". Tái lập dùng hai nhánh ViT giống BiCM-Prompt (chiều 128, 4 lớp, 4 head, mỗi nhánh một modality), bỏ prompt; đặc trưng = ghép trung bình token của hai nhánh (256 chiều). Số tham số ≈ 1,63M, ít hơn 2,445M của bài báo — bài báo không mô tả chi tiết nên không khớp được con số này."]));
+children.push(bullet([b("Bộ nhớ replay: "), "K = 30 / 33 / 35 chia đều cho các lớp đã học (2 / 3 / 5 mẫu/lớp ở session cuối), giống phương pháp đề xuất và đúng tiêu đề cột của Table IV."]));
+children.push(bullet([b("Optimizer: "), "bài báo không nêu siêu tham số của baseline. Mặc định của PyCIL (SGD, lr 0,1) được thiết kế cho CNN trên CIFAR và không hội tụ với ViT ở đây (bảng thử nghiệm bên dưới), nên mọi baseline dùng Adam, lr 1e-3 — như bài báo dùng khi huấn luyện mô hình — với số epoch và lịch giảm lr mặc định của PyCIL cho từng phương pháp (lr ở session tăng dần được giảm theo đúng tỉ lệ PyCIL dùng)."]));
+children.push(bullet([b("Cách phân loại: "), "bảng chính dùng lớp fc (PyCIL gọi là \"CNN\"), là số PyCIL báo cáo mặc định; bảng NME trình bày riêng. Với FOSTER, PyCIL đánh giá mạng teacher (hai backbone) sau mỗi session; mạng student đã nén chỉ dùng từ session sau — giữ nguyên như PyCIL."]));
+children.push(bullet([b("Ours: "), "kết quả seed 0 của phương pháp đề xuất (mục 7), cách phân loại theo mã gốc (NME ở Base, fc ở các session sau). Tham số học ≈ 0,85M ở các session tăng dần."]));
+if (pilotSgd) {
+  const pa = baselineRun("icarl", "houston");
+  children.push(caption("Chọn optimizer cho baseline: iCaRL, Houston 2013, seed 0 (OA / AA / Kappa, fc)", "không có trong bài báo"));
+  children.push(table(["Session", "SGD lr 0,1 (mặc định PyCIL)", "Adam lr 1e-3 (đã chọn)", "Bài báo (iCaRL)"],
+    pilotSgd.sessions.map((s, k) => [sname(k), `${f2(s.OA)} / ${f2(s.AA)} / ${f2(s.Kappa)}`,
+      pa ? `${f2(pa.sessions[k].OA)} / ${f2(pa.sessions[k].AA)} / ${f2(pa.sessions[k].Kappa)}` : "…",
+      `${f2(PAPER_T4.icarl.houston[k].OA)} / ${f2(PAPER_T4.icarl.houston[k].AA)} / ${f2(PAPER_T4.icarl.houston[k].K)}`]),
+    [1.3, 2.6, 2.6, 2.6]));
+}
+const part1b = children.splice(0);
+
+children.push(h2("6.2. Bảng kiểu Table IV"));
+children.push(caption(`Kết quả tái lập trên ba bộ dữ liệu, seed ${T4_SEED}, phân loại bằng fc`, "cùng bố cục Table IV"));
+children.push(t4Table((m, ds, s) => reproCell(m, ds, s), { params: paramsRepro }));
+children.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
+children.push(caption("Số liệu của bài báo (chép lại từ Table IV)", "Table IV"));
+children.push(t4Table(paperCell, { params: paramsPaper }));
+children.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
+children.push(caption("Chênh lệch tái lập − bài báo (điểm %; APD: số dương = quên nhiều hơn bài báo)", "so với Table IV"));
+children.push(t4Table(diffCell, { params: () => "", signed: true, bold: false }));
+children.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
+children.push(caption(`Kết quả tái lập, seed ${T4_SEED}, phân loại bằng NME (LwF không lưu exemplar nên không có NME; APD theo NME của Ours chưa có vì các lần chạy chính được làm trước khi ghi chỉ số này — sẽ bổ sung khi chạy lại --eval nme)`, "cùng bố cục Table IV — giả định bài báo dùng NME"));
+children.push(t4Table((m, ds, s) => reproCell(m, ds, s, "nme"), { params: paramsRepro }));
+const part2 = children.splice(0);
+
+// 7
+children.push(h1("7. Kết quả phương pháp đề xuất"));
 let sub = 0;
 for (const d of DATASETS) {
   sub += 1;
-  children.push(h2(`6.${sub}. ${d.title}`));
+  children.push(h2(`7.${sub}. ${d.title}`));
   const runs = d.runs;
   if (!runs.length) { children.push(p("Chưa có kết quả.")); continue; }
   const nS = d.paper.length;
@@ -310,7 +490,7 @@ for (const d of DATASETS) {
 // LiDAR variants
 const lv = LIDAR_VARIANTS.filter((v) => v.run);
 sub += 1;
-children.push(h2(`6.${sub}. MUUFL: thử các kênh LiDAR khác nhau`));
+children.push(h2(`7.${sub}. MUUFL: thử các kênh LiDAR khác nhau`));
 children.push(p("Cùng phép chia seed 0, chỉ thay kênh LiDAR đưa vào nhánh thứ hai. Đây là thí nghiệm bổ sung để kiểm tra giả định chọn kênh."));
 if (lv.length) {
   children.push(caption("MUUFL seed 0: OA theo lựa chọn kênh LiDAR (%)", "không có trong bài báo — phân tích bổ sung"));
@@ -326,7 +506,7 @@ if (lv.length) {
 if (origRuns.length) {
   const r = origRuns[0];
   sub += 1;
-  children.push(h2(`6.${sub}. Mã gốc nguyên trạng trên Houston 2013`));
+  children.push(h2(`7.${sub}. Mã gốc nguyên trạng trên Houston 2013`));
   children.push(caption("Mã gốc nguyên trạng (preset original: 7+3+3+2, 144 band, bộ chia DFC2013, seed 0)", "không so trực tiếp được với Table IV"));
   children.push(table(["Session", "Số lớp", "OA", "AA", "Kappa", "APD"],
     r.sessions.map((s) => [sname(s.session), s.seen_classes, f2(s.OA), f2(s.AA), f2(s.Kappa), s.session ? f4(s.APD) : "–"]),
@@ -335,7 +515,7 @@ if (origRuns.length) {
 }
 
 // 7
-children.push(h1("7. Nhận xét"));
+children.push(h1("8. Nhận xét"));
 const lastGap = (d) => {
   const s = d.paper.length - 1;
   return (mean(d.runs.map((r) => r.sessions[s].OA)) - d.paper[s].OA).toFixed(1);
@@ -354,15 +534,16 @@ if (origRuns.length) children.push(bullet([b("Mã gốc nguyên trạng "), `cho
 children.push(bullet([b("Kết luận tạm thời: "), "mã công khai không phải là cấu hình đã tạo ra Table IV. Sau khi đưa về đúng mô tả của bài báo và sửa lỗi optimizer, kết quả khớp ở các session đầu nhưng vẫn lệch ở các session cuối. Những yếu tố bài báo không công bố (epoch, lr, trọng số loss ở session tăng dần; cách phân loại khi đánh giá) là nghi vấn chính."]));
 
 // 8
-children.push(h1("8. Việc tiếp theo"));
-children.push(numbered("Sáu baseline có replay của Table IV (LwF, iCaRL, PodNet, WA, Foster, BEEF) qua PyCIL trên cả ba bộ dữ liệu."));
+children.push(h1("9. Việc tiếp theo"));
+children.push(numbered("Hoàn tất seed 0 của sáu baseline trên cả ba bộ dữ liệu, sau đó chạy seed 1–2; kiểm tra riêng PodNet (kém bài báo rõ rệt trên Houston: chưng cất POD-spatial trên lưới token 11×11 và lr là nghi vấn)."));
+children.push(numbered("Chạy lại đánh giá NME ở mọi session và seed 1–2 cho biến thể LiDAR 2 kênh của MUUFL (đã tạm dừng để ưu tiên baseline)."));
 children.push(numbered("DualPrompt và Adam-adapter (Table V)."));
 children.push(numbered("Ablation thành phần (Table VI) và các phân tích khác: top-k, độ dài prompt, prompt đơn modality, dung lượng bộ nhớ, thứ tự lớp."));
 children.push(numbered("Thử nghiệm độ nhạy cho các giả định chưa rõ (lr/epoch session tăng dần, cách phân loại)."));
 children.push(numbered("Cân nhắc mở issue trên GitHub của tác giả hỏi cấu hình chính xác của Table IV và báo lỗi optimizer."));
 
 // 9
-children.push(h1("9. Cách chạy lại"));
+children.push(h1("10. Cách chạy lại"));
 children.push(...codeBlock([
   "conda activate cil_rs && export PYTHONNOUSERSITE=1",
   "cd ~/BiCMPT/my_cil && git checkout paper-config",
@@ -377,10 +558,15 @@ children.push(...codeBlock([
   "python -m scripts.prepare_multisource --dataset augsburg --raw-dir data_augsburg/raw --out-dir data_augsburg/paper_seed0 --seed 0",
   "python -m scripts.run_cil --preset paper --dataset augsburg --data-dir data_augsburg/paper_seed0 --seed 0",
   "# mã gốc: python -m scripts.run_cil --preset original --data-dir data_houston/original_dfc",
+  "# baseline PyCIL (cần clone G-U-N/PyCIL vào baselines/PyCIL, commit f3509b8)",
+  "cd ~/BiCMPT/baselines && python rs_pycil.py --method icarl --dataset houston --seed 0 --optimizer adam",
+  "#   --method: lwf | icarl | podnet | wa | foster | beef; --dataset: houston | muufl | augsburg",
   "# cập nhật báo cáo: cd ~/BiCMPT/report && node make_report.js",
 ]));
 
 // ---------- document ----------
+const PORTRAIT = { size: { width: PAGE_W, height: 16838 }, margin: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN } };
+const footer = () => new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ children: ["Trang ", PageNumber.CURRENT], size: 18 })] })] });
 const doc = new Document({
   styles: {
     default: { document: { run: { font: FONT, size: 24 } } },
@@ -396,11 +582,11 @@ const doc = new Document({
       { reference: "numbers", levels: [{ level: 0, format: LevelFormat.DECIMAL, text: "%1.", alignment: AlignmentType.LEFT, style: { paragraph: { indent: { left: 567, hanging: 340 } } } }] },
     ],
   },
-  sections: [{
-    properties: { page: { size: { width: PAGE_W, height: 16838 }, margin: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN } } },
-    footers: { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ children: ["Trang ", PageNumber.CURRENT], size: 18 })] })] }) },
-    children,
-  }],
+  sections: [
+    { properties: { page: PORTRAIT }, footers: { default: footer() }, children: [...part1, ...part1b] },
+    { properties: { page: { ...PORTRAIT, size: { width: PAGE_W, height: 16838, orientation: PageOrientation.LANDSCAPE } } }, footers: { default: footer() }, children: part2 },
+    { properties: { page: PORTRAIT }, footers: { default: footer() }, children },
+  ],
 });
 
 Packer.toBuffer(doc).then((buf) => {
