@@ -53,15 +53,16 @@ const DATASETS = [
   },
 ];
 
-function loadRuns(prefix) {
-  if (!fs.existsSync(RESULTS)) return [];
-  return fs.readdirSync(RESULTS)
+function loadRuns(prefix, dir = RESULTS) {
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir)
     .filter((f) => f.startsWith(prefix) && /seed\d+\.json$/.test(f))
     .sort()
-    .map((f) => ({ name: f.replace(".json", ""), seed: f.match(/seed(\d+)/)[1], ...JSON.parse(fs.readFileSync(path.join(RESULTS, f))) }));
+    .map((f) => ({ name: f.replace(".json", ""), seed: f.match(/seed(\d+)/)[1], ...JSON.parse(fs.readFileSync(path.join(dir, f))) }));
 }
 for (const d of DATASETS) {
   d.runs = loadRuns(d.prefix);
+  d.nmeRuns = loadRuns(d.prefix, path.join(RESULTS, "eval_nme"));
   const metaPath = path.join(ROOT, d.data, "paper_seed0", "meta.json");
   d.meta = fs.existsSync(metaPath) ? JSON.parse(fs.readFileSync(metaPath)) : null;
   d.paperAvg = ["OA", "AA", "K"].reduce((o, k) => ({ ...o, [k]: d.paper.reduce((a, s) => a + s[k], 0) / d.paper.length }), {});
@@ -245,7 +246,8 @@ children.push(h1("5. Cấu hình chạy và giả định"));
 children.push(bullet("Base: 30 epoch, Adam lr 1e-3, batch 32 (hiểu \"pretraining\" trong bài báo là session base, vì mã không có bước pretrain tương thích: scripts/pretrain_backbone.py dùng ViT 768 chiều, khác backbone 128 chiều của mô hình)."));
 children.push(bullet("Session tăng dần: 35 epoch, Adam lr 1e-4, batch 16, weight decay 1e-4, cosine annealing — giữ mặc định của mã (bài báo không nêu)."));
 children.push(bullet("Trọng số các hàm loss: giữ như mã (CE + 0,01·MI + sim + aux + distill, CE có trọng số OT)."));
-children.push(bullet([b("Hai cách phân loại: "), "fc = lớp tuyến tính cuối mạng; NME = gán mẫu vào lớp có trung bình đặc trưng exemplar gần nhất (cách của iCaRL). Mã gốc dùng NME ở session base và fc ở các session sau; bài báo không nói dùng cách nào. Số liệu chính trong báo cáo theo mã gốc; NME được ghi kèm để thấy ảnh hưởng của lựa chọn này."]));
+children.push(bullet([b("Hai cách phân loại: "), "fc = lớp tuyến tính cuối mạng; NME = gán mẫu vào lớp có trung bình đặc trưng exemplar gần nhất (cách của iCaRL). Mã gốc dùng NME ở session base và fc ở các session sau; bài báo không nói dùng cách nào. Số liệu chính trong báo cáo theo mã gốc; kết quả khi dùng NME ở mọi session được trình bày riêng."]));
+children.push(bullet([b("Bài báo có nhắc đến NME không: "), "không. Phần đánh giá và cài đặt không mô tả cách đưa ra dự đoán khi kiểm thử; bài báo chỉ nói hàm loss là cross-entropy (Eq. 1), tức huấn luyện qua lớp fc. \"Class mean\" chỉ xuất hiện ở phần tổng quan khi giới thiệu iCaRL. Các baseline chạy bằng PyCIL — thư viện này báo cả độ chính xác theo fc (\"CNN\") lẫn theo NME — nhưng bài báo không nói lấy số nào."]));
 children.push(bullet("APD theo công thức (20) của bài báo, trùng với hàm calculate_forgetting_rate của mã."));
 children.push(bullet("Mỗi bộ dữ liệu chạy 3 seed (0, 1, 2), mỗi seed dùng một phép chia train/test ngẫu nhiên khác nhau."));
 
@@ -277,10 +279,23 @@ for (const d of DATASETS) {
     runs.map((r) => [r.seed, ...d.paper.map((_, s) => r.sessions[s] ? `${f2(r.sessions[s].OA)} / ${f2(r.sessions[s].AA)} / ${f2(r.sessions[s].Kappa)}` : "–"), f2(r.average.OA)]),
     [0.7, ...d.paper.map(() => 2.2), 1.1]));
 
-  children.push(caption(`${d.title}: OA theo hai cách phân loại fc và NME (trung bình các seed, %)`, "không có trong bài báo — phân tích bổ sung"));
-  children.push(table(["Session", "fc", "NME", "OA bài báo"],
-    d.paper.map((x, s) => [sname(s), ms(runs.map((r) => r.sessions[s].fc.OA)), ms(runs.map((r) => r.sessions[s].nme.OA)), f2(x.OA)]),
-    [2, 3, 3, 2]));
+  // NME at every session: prefer dedicated --eval nme reruns, else the NME metrics recorded in the main runs.
+  const nmeSrc = d.nmeRuns.length ? d.nmeRuns : runs;
+  const nmeApd = (s) => nmeSrc.map((r) => r.sessions[s].nme.APD).filter((x) => x !== undefined && x !== null);
+  const nmeRows = d.paper.map((x, s) => {
+    const apd = nmeApd(s);
+    return [sname(s), ms(runs.map((r) => r.sessions[s].fc.OA)),
+      ms(nmeSrc.map((r) => r.sessions[s].nme.OA)), ms(nmeSrc.map((r) => r.sessions[s].nme.AA)), ms(nmeSrc.map((r) => r.sessions[s].nme.Kappa)),
+      s === 0 ? "–" : apd.length ? ms(apd, 4) + (apd.length < nmeSrc.length ? ` (${apd.length} seed)` : "") : "chờ",
+      `${f2(x.OA)} / ${f2(x.AA)} / ${f2(x.K)}`, f4(x.APD)];
+  });
+  const avgN = (k) => nmeSrc.map((r) => mean(r.sessions.map((ss) => ss.nme[k])));
+  nmeRows.push(["Trung bình", ms(runs.map((r) => mean(r.sessions.map((ss) => ss.fc.OA)))), ms(avgN("OA")), ms(avgN("AA")), ms(avgN("Kappa")), "",
+    `${f2(d.paperAvg.OA)} / ${f2(d.paperAvg.AA)} / ${f2(d.paperAvg.K)}`, ""]);
+  children.push(caption(`${d.title}: đánh giá bằng NME ở mọi session (${nmeSrc.length} seed${d.nmeRuns.length ? ", chạy lại với --eval nme" : ""}) so với bài báo`,
+    "đối chiếu Table IV, dòng Ours — giả định bài báo dùng NME"));
+  children.push(table(["Session", "OA fc", "OA NME", "AA NME", "Kappa NME", "APD NME", "Bài báo OA / AA / Kappa", "APD bài báo"],
+    nmeRows, [1.4, 1.4, 1.4, 1.4, 1.4, 1.5, 2.2, 1.1], { rowFill: (ri) => (ri === d.paper.length ? "F2F2F2" : undefined) }));
 
   const header = ["#", "Lớp", ...d.paper.map((_, s) => `Sau ${sname(s)}`)];
   const pc = d.classes.map((n, k) => [k + 1, n, ...d.paper.map((_, s) => {
@@ -331,10 +346,10 @@ const lastNmeGap = (d) => {
 };
 for (const d of DATASETS.filter((x) => x.runs.length)) {
   const s0 = (mean(d.runs.map((r) => r.sessions[0].OA)) - d.paper[0].OA).toFixed(1);
-  children.push(bullet([b(`${d.title}: `), `OA session base lệch ${s0} điểm so với bài báo; OA session cuối lệch ${lastGap(d)} điểm với fc và ${lastNmeGap(d)} điểm nếu dùng NME (số âm = thấp hơn bài báo).`]));
+  children.push(bullet([b(`${d.title}: `), `OA session base lệch ${s0 > 0 ? "+" : ""}${s0} điểm so với bài báo; OA session cuối lệch ${lastGap(d)} điểm với fc và ${lastNmeGap(d)} điểm nếu dùng NME (số âm = thấp hơn bài báo).`]));
 }
-children.push(bullet([b("Xu hướng chung: "), "session base và session tăng dần đầu tiên tái lập được gần với bài báo; các session sau thấp hơn, chủ yếu do một vài lớp cũ bị quên mạnh (xem bảng độ chính xác từng lớp). Độ dao động giữa các seed lớn ở các session cuối."]));
-children.push(bullet([b("Cách phân loại: "), "ở các session cuối, NME thường cho OA cao hơn fc. Bài báo không nói dùng cách nào; đây là một nghi vấn chính khi so sánh."]));
+children.push(bullet([b("Xu hướng chung: "), "Houston khớp bài báo ở Base và Session 1. MUUFL và Augsburg thấp hơn bài báo 5–6 điểm ngay từ Base (ít mẫu train hơn: 100 và 150 mẫu/lớp), nhưng OA ở Session 1 gần bài báo. Ở các session sau, cả ba bộ đều thấp hơn bài báo, chủ yếu do một vài lớp cũ bị quên mạnh (xem bảng độ chính xác từng lớp); độ dao động giữa các seed cũng lớn hơn."]));
+children.push(bullet([b("Cách phân loại: "), "dùng NME ở mọi session làm tăng OA ở các session cuối trên cả ba bộ (Houston Session 3 +3,8; MUUFL Session 2 +13, Session 3 +8; Augsburg Session 2 +9 điểm), nhưng làm giảm mạnh ở Augsburg Session 1 (−11,5 điểm). Ngay cả với NME, OA session cuối vẫn thấp hơn bài báo 6–10 điểm. Vậy lựa chọn fc/NME chỉ giải thích được một phần chênh lệch; phần còn lại nhiều khả năng do các siêu tham số không được công bố (epoch, lr, trọng số loss ở session tăng dần)."]));
 if (origRuns.length) children.push(bullet([b("Mã gốc nguyên trạng "), `cho OA cuối ${origRuns[0].sessions[origRuns[0].sessions.length - 1].OA.toFixed(2)} % trên Houston và quên mạnh ngay từ Session 1 (APD ${origRuns[0].sessions[1].APD.toFixed(3)}).`]));
 children.push(bullet([b("Kết luận tạm thời: "), "mã công khai không phải là cấu hình đã tạo ra Table IV. Sau khi đưa về đúng mô tả của bài báo và sửa lỗi optimizer, kết quả khớp ở các session đầu nhưng vẫn lệch ở các session cuối. Những yếu tố bài báo không công bố (epoch, lr, trọng số loss ở session tăng dần; cách phân loại khi đánh giá) là nghi vấn chính."]));
 
