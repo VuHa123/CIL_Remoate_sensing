@@ -445,17 +445,24 @@ children.push(table(["Phương pháp", "Base", "Mỗi session tăng dần", "L�
 const part1b = children.splice(0);
 
 children.push(h2("6.2. Bảng kiểu Table IV"));
-children.push(caption(`Kết quả tái lập trên ba bộ dữ liệu, seed ${T4_SEED}, phân loại bằng fc`, "cùng bố cục Table IV"));
+children.push(p("Bảng kết quả tái lập duy nhất của mục này (không kèm số liệu bài báo). Các bảng đối chiếu với bài báo và kết quả theo NME nằm ở Phụ lục A."));
+children.push(caption(`Kết quả tái lập trên ba bộ dữ liệu, seed ${T4_SEED}, phân loại bằng fc (APD / OA / AA / Kappa)`, "cùng bố cục Table IV"));
 children.push(t4Table((m, ds, s) => reproCell(m, ds, s), { params: paramsRepro }));
-children.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
-children.push(caption("Số liệu của bài báo (chép lại từ Table IV)", "Table IV"));
-children.push(t4Table(paperCell, { params: paramsPaper }));
-children.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
-children.push(caption("Chênh lệch tái lập − bài báo (điểm %; APD: số dương = quên nhiều hơn bài báo)", "so với Table IV"));
-children.push(t4Table(diffCell, { params: () => "", signed: true, bold: false }));
-children.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
-children.push(caption(`Kết quả tái lập, seed ${T4_SEED}, phân loại bằng NME (LwF không lưu exemplar nên không có NME; APD theo NME của Ours chưa có vì các lần chạy chính được làm trước khi ghi chỉ số này — sẽ bổ sung khi chạy lại --eval nme)`, "cùng bố cục Table IV — giả định bài báo dùng NME"));
-children.push(t4Table((m, ds, s) => reproCell(m, ds, s, "nme"), { params: paramsRepro }));
+const buildT4Appendix = () => {
+  const out = [];
+  out.push(h1("Phụ lục A. Đối chiếu Table IV với bài báo"));
+  out.push(p("Các bảng cùng bố cục với Bảng kết quả ở mục 6.2: số liệu của bài báo, chênh lệch tái lập − bài báo, và kết quả tái lập khi phân loại bằng NME."));
+  out.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
+  out.push(caption("Số liệu của bài báo (chép lại từ Table IV)", "Table IV"));
+  out.push(t4Table(paperCell, { params: paramsPaper }));
+  out.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
+  out.push(caption("Chênh lệch tái lập − bài báo (điểm %; APD: số dương = quên nhiều hơn bài báo)", "so với Table IV"));
+  out.push(t4Table(diffCell, { params: () => "", signed: true, bold: false }));
+  out.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
+  out.push(caption(`Kết quả tái lập, seed ${T4_SEED}, phân loại bằng NME (LwF không lưu exemplar nên không có NME; APD theo NME của Ours chưa có vì các lần chạy chính được làm trước khi ghi chỉ số này — sẽ bổ sung khi chạy lại --eval nme)`, "cùng bố cục Table IV — giả định bài báo dùng NME"));
+  out.push(t4Table((m, ds, s) => reproCell(m, ds, s, "nme"), { params: paramsRepro }));
+  return out;
+};
 // ---- Table V replica (Last / Average) ----
 const PAPER_T5 = { // [APD, OA, AA, Kappa]; Average rows have no APD
   dualprompt: { params: "0.815M", houston: [P(0.0330, 74.02, 77.75, 72.00), P(null, 83.77, 85.63, 81.18)], muufl: [P(0.0288, 70.66, 62.60, 62.92), P(null, 78.15, 73.02, 71.19)], augsburg: [P(0.2022, 59.13, 59.24, 49.12), P(null, 73.84, 67.83, 58.82)] },
@@ -684,6 +691,7 @@ children.push(...codeBlock([
   "# cập nhật báo cáo: cd ~/BiCMPT/report && node make_report.js",
 ]));
 
+const appendixT4 = buildT4Appendix();
 // ---------- document ----------
 const PORTRAIT = { size: { width: PAGE_W, height: 16838 }, margin: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN } };
 const footer = () => new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ children: ["Trang ", PageNumber.CURRENT], size: 18 })] })] });
@@ -706,6 +714,7 @@ const doc = new Document({
     { properties: { page: PORTRAIT }, footers: { default: footer() }, children: [...part1, ...part1b] },
     { properties: { page: { ...PORTRAIT, size: { width: PAGE_W, height: 16838, orientation: PageOrientation.LANDSCAPE } } }, footers: { default: footer() }, children: part2 },
     { properties: { page: PORTRAIT }, footers: { default: footer() }, children },
+    { properties: { page: { ...PORTRAIT, size: { width: PAGE_W, height: 16838, orientation: PageOrientation.LANDSCAPE } } }, footers: { default: footer() }, children: appendixT4 },
   ],
 });
 
