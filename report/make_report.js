@@ -431,6 +431,17 @@ if (pilotSgd) {
       `${f2(PAPER_T4.lwf.augsburg[k].OA)} / ${f2(PAPER_T4.lwf.augsburg[k].AA)} / ${f2(PAPER_T4.lwf.augsburg[k].K)}`]), [1.3, 2.6, 2.6, 2.6]));
   }
 }
+children.push(p([b("Số epoch: "), "bài báo không nêu số epoch cho phương pháp nào. Các baseline giữ mặc định của PyCIL (thiết kế cho CIFAR-100/ResNet), dài hơn nhiều so với phương pháp đề xuất:"]));
+children.push(caption("Số epoch theo session (mặc định của mã; Session1 = Session2 = Session3)", "không có trong bài báo"));
+children.push(table(["Phương pháp", "Base", "Mỗi session tăng dần", "Lịch lr"], [
+  ["Ours (BiCM-Prompt)", "30", "35", "cosine; lr 1e-3 (base), 1e-4 (tăng dần)"],
+  ["LwF", "200", "250", "giảm ở mốc cố định"],
+  ["iCaRL", "200", "170", "giảm ở mốc cố định"],
+  ["WA", "200", "170", "giảm ở mốc cố định"],
+  ["PodNet", "160", "160 + 20 fine-tune cân bằng", "cosine"],
+  ["FOSTER", "200", "170 mở rộng + 130 nén", "cosine"],
+  ["BEEF", "200", "170 mở rộng + 60 gộp", "cosine"],
+], [2.2, 1, 2.8, 3]));
 const part1b = children.splice(0);
 
 children.push(h2("6.2. Bảng kiểu Table IV"));
