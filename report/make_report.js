@@ -549,6 +549,20 @@ children.push(bullet([b("Cách phân loại: "), "dùng NME ở mọi session l�
 if (origRuns.length) children.push(bullet([b("Mã gốc nguyên trạng "), `cho OA cuối ${origRuns[0].sessions[origRuns[0].sessions.length - 1].OA.toFixed(2)} % trên Houston và quên mạnh ngay từ Session 1 (APD ${origRuns[0].sessions[1].APD.toFixed(3)}).`]));
 children.push(bullet([b("Kết luận tạm thời: "), "mã công khai không phải là cấu hình đã tạo ra Table IV. Sau khi đưa về đúng mô tả của bài báo và sửa lỗi optimizer, kết quả khớp ở các session đầu nhưng vẫn lệch ở các session cuối. Những yếu tố bài báo không công bố (epoch, lr, trọng số loss ở session tăng dần; cách phân loại khi đánh giá) là nghi vấn chính."]));
 
+{
+  // baseline observations (seed 0, batch 32); numbers read from the result files
+  const last = (m, ds) => { const r = baselineRun(m, ds); return r ? r.sessions[r.sessions.length - 1] : null; };
+  const sOA = (x, k = "OA") => (x ? x[k].toFixed(2) : "…");
+  const nOA = (x) => (x && x.nme && x.nme.OA != null ? x.nme.OA.toFixed(2) : "…");
+  const pl = (m, ds) => { const a = PAPER_T4[m][ds]; return a[a.length - 1].OA.toFixed(2); };
+  children.push(h2("Baseline (mục 6, seed 0, batch 32)"));
+  children.push(bullet([b("LwF và WA "), `khớp bài báo tốt nhất: OA session cuối trên Houston LwF ${sOA(last("lwf", "houston"))} (bài báo ${pl("lwf", "houston")}), WA ${sOA(last("wa", "houston"))} (bài báo ${pl("wa", "houston")}); trên Augsburg WA ${sOA(last("wa", "augsburg"))} (bài báo ${pl("wa", "augsburg")}).`]));
+  children.push(bullet([b("FOSTER "), `chỉ khớp bài báo khi đánh giá bằng NME: OA session cuối trên Houston fc ${sOA(last("foster", "houston"))} / NME ${nOA(last("foster", "houston"))} so với ${pl("foster", "houston")} của bài báo; trên Augsburg fc ${sOA(last("foster", "augsburg"))} / NME ${nOA(last("foster", "augsburg"))} so với ${pl("foster", "augsburg")}. Với FOSTER, mạng teacher sau mỗi session gần như không quên lớp cũ (APD ≈ 0) nhưng lớp fc phân loại kém lớp mới. Đây là dấu hiệu bài báo có thể đã dùng NME, ít nhất cho FOSTER.`]));
+  children.push(bullet([b("PodNet "), `(sau khi sửa lỗi lr) cao hơn bài báo trên Houston: OA session cuối ${sOA(last("podnet", "houston"))} so với ${pl("podnet", "houston")}. Trên Augsburg OA/Kappa các session tăng dần cao hơn nhưng AA thấp hơn bài báo, và session base thấp hơn ~10 điểm (bộ phân loại cosine nhiều proxy của PodNet học kém hơn trên 450 mẫu).`]));
+  children.push(bullet([b("iCaRL "), `khớp bài báo ở Base và Session1 trên Houston nhưng quên đột ngột ở Session2 (APD 0,64), OA session cuối ${sOA(last("icarl", "houston"))} (NME ${nOA(last("icarl", "houston"))}) so với ${pl("icarl", "houston")}. Trên Augsburg khá sát bài báo.`]));
+  children.push(bullet([b("BEEF "), "trên Augsburg học lớp mới rất kém ở giai đoạn mở rộng (xem mục 6.1); trên MUUFL Session1 bình thường. Cần kiểm tra thêm trước khi kết luận."]));
+  children.push(bullet([b("Lưu ý chung: "), "session base của LwF, iCaRL và WA giống hệt nhau vì cùng seed và cùng huấn luyện bằng cross-entropy; trong bài báo các giá trị này khác nhau (ví dụ Augsburg 84,32–93,65), nên nhiều khả năng mỗi baseline được chạy với seed hoặc cấu hình khác nhau. Trên Augsburg, OA bị chi phối bởi Low Plants và Residential (≈ 73 % tập test), nên AA và APD phản ánh khả năng chống quên tốt hơn OA."]));
+}
 // 8
 children.push(h1("9. Việc tiếp theo"));
 children.push(numbered("Hoàn tất seed 0 của sáu baseline trên cả ba bộ dữ liệu, sau đó chạy seed 1–2; kiểm tra riêng PodNet (kém bài báo rõ rệt trên Houston: chưng cất POD-spatial trên lưới token 11×11 và lr là nghi vấn)."));
