@@ -397,7 +397,7 @@ function t4Table(getCell, { params, signed = false, bold = true, missing = "…"
 }
 
 const nDone = T4_METHODS.filter((mm) => mm.key !== "ours").reduce((a, mm) => a + DS_KEYS.filter((ds) => baselineRun(mm.key, ds)).length, 0);
-children.push(h1("6. So sánh với Table IV: sáu baseline và phương pháp đề xuất trên ba bộ dữ liệu"));
+children.push(h1("6. So sánh với Table IV và Table V: baseline và phương pháp đề xuất trên ba bộ dữ liệu"));
 children.push(p(`Bảng dưới đây có cùng bố cục với Table IV của bài báo: mỗi phương pháp một khối dòng (Base, Session1–3), mỗi bộ dữ liệu bốn cột APD / OA / AA / Kappa. Đây là kết quả tham chiếu với một seed (seed ${T4_SEED}) cho mọi phương pháp; phương pháp đề xuất đã có 3 seed (mục 7). Ô "…" là lần chạy chưa xong (hiện có ${nDone}/18 lần chạy baseline). Chữ đậm: giá trị cao nhất trong cột ở mỗi session (như bài báo, không đánh dấu APD).`));
 children.push(h2("6.1. Cách chạy các baseline"));
 children.push(bullet([b("Khung mã: "), "PyCIL (github.com/G-U-N/PyCIL, commit f3509b8, giấy phép MIT) — bài báo ghi các baseline được cài đặt trong PyCIL. Mã PyCIL giữ nguyên; script ", code("baselines/rs_pycil.py"), " nạp dữ liệu viễn thám, backbone và cách tính chỉ số vào PyCIL."]));
@@ -456,6 +456,85 @@ children.push(t4Table(diffCell, { params: () => "", signed: true, bold: false })
 children.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
 children.push(caption(`Kết quả tái lập, seed ${T4_SEED}, phân loại bằng NME (LwF không lưu exemplar nên không có NME; APD theo NME của Ours chưa có vì các lần chạy chính được làm trước khi ghi chỉ số này — sẽ bổ sung khi chạy lại --eval nme)`, "cùng bố cục Table IV — giả định bài báo dùng NME"));
 children.push(t4Table((m, ds, s) => reproCell(m, ds, s, "nme"), { params: paramsRepro }));
+// ---- Table V replica (Last / Average) ----
+const PAPER_T5 = { // [APD, OA, AA, Kappa]; Average rows have no APD
+  dualprompt: { params: "0.815M", houston: [P(0.0330, 74.02, 77.75, 72.00), P(null, 83.77, 85.63, 81.18)], muufl: [P(0.0288, 70.66, 62.60, 62.92), P(null, 78.15, 73.02, 71.19)], augsburg: [P(0.2022, 59.13, 59.24, 49.12), P(null, 73.84, 67.83, 58.82)] },
+  adamadapter: { params: "0.924M", houston: [P(0.0091, 73.06, 77.73, 70.93), P(null, 82.02, 84.65, 80.28)], muufl: [P(0.0196, 67.84, 66.45, 60.00), P(null, 76.95, 76.72, 70.04)], augsburg: [P(0.2482, 52.22, 57.46, 40.95), P(null, 68.97, 69.44, 53.80)] },
+  ours: { params: "0.843M", houston: [P(0.0576, 77.39, 82.09, 75.56), P(null, 87.58, 89.71, 86.36)], muufl: [P(0.1003, 73.97, 67.02, 65.46), P(null, 79.33, 77.54, 72.14)], augsburg: [P(0.2431, 75.87, 58.73, 66.45), P(null, 84.89, 73.34, 73.57)] },
+};
+// values per (dataset, row 0 = Last / 1 = Average): arrays over seeds, or paper scalars
+function oursT5(ds, row, kind) {
+  const d = dsByKey[ds];
+  const src = kind === "nme" ? (d.nmeRuns.length ? d.nmeRuns : d.runs) : d.runs;
+  if (!src.length) return null;
+  const n = d.paper.length - 1;
+  const g = (sess, k) => (kind === "nme" ? sess.nme && sess.nme[k] : sess[k]);
+  if (row === 0) {
+    let apd = src.map((r) => g(r.sessions[n], "APD")).filter((x) => x !== undefined && x !== null);
+    if (apd.length < src.length) apd = null; // incomplete (older runs did not record NME APD)
+    return { APD: apd, OA: src.map((r) => g(r.sessions[n], "OA")), AA: src.map((r) => g(r.sessions[n], "AA")), K: src.map((r) => g(r.sessions[n], "Kappa")) };
+  }
+  const av = (k) => src.map((r) => mean(r.sessions.map((ss) => g(ss, k))));
+  return { APD: null, OA: av("OA"), AA: av("AA"), K: av("Kappa") };
+}
+function t5Table(rowsSpec) {
+  const rel = [1.9, 0.8, 0.9, ...Array(12).fill(0.85)];
+  const tot = rel.reduce((a, c) => a + c, 0);
+  const w = rel.map((x) => Math.floor((x / tot) * LAND_W));
+  w[w.length - 1] += LAND_W - w.reduce((a, c) => a + c, 0);
+  const mk = (text, width, o = {}) => new TableCell({
+    borders, width: { size: width, type: WidthType.DXA }, columnSpan: o.colSpan, rowSpan: o.rowSpan, verticalAlign: "center",
+    margins: { top: 30, bottom: 30, left: 40, right: 40 },
+    shading: o.head ? { type: ShadingType.CLEAR, fill: "D9E2F3", color: "auto" } : o.fill ? { type: ShadingType.CLEAR, fill: o.fill, color: "auto" } : undefined,
+    children: [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0 }, children: [new TextRun({ text: String(text), bold: o.head || o.bold, size: 16 })] })],
+  });
+  const fmtV = (v, k, signed) => {
+    if (v === null || v === undefined) return "-";
+    const dg = k === "APD" ? 4 : 2;
+    if (Array.isArray(v)) return v.length ? (v.length === 1 ? v[0].toFixed(dg) : `${mean(v).toFixed(dg)} ±${std(v).toFixed(dg)}`) : "-";
+    const t = v.toFixed(dg);
+    return signed && v > 0 ? `+${t}` : t;
+  };
+  const rows = [
+    new TableRow({ tableHeader: true, children: [mk("Phương pháp", w[0], { head: true, rowSpan: 2 }), mk("Tham số học", w[1], { head: true, rowSpan: 2 }), mk("Session", w[2], { head: true, rowSpan: 2 }),
+      ...DS_KEYS.map((ds, j) => mk(T4_HEAD[ds], w[3 + 4 * j] * 4, { head: true, colSpan: 4 }))] }),
+    new TableRow({ tableHeader: true, children: DS_KEYS.flatMap((ds, j) => ["APD", "OA", "AA", "Kappa"].map((h, q) => mk(h, w[3 + 4 * j + q], { head: true }))) }),
+  ];
+  for (const spec of rowsSpec) {
+    [0, 1].forEach((row) => {
+      const cells = [];
+      if (row === 0) { cells.push(mk(spec.name, w[0], { rowSpan: 2, bold: spec.bold, fill: spec.fill })); cells.push(mk(spec.params, w[1], { rowSpan: 2, fill: spec.fill })); }
+      cells.push(mk(row === 0 ? "Last" : "Average", w[2], { fill: spec.fill }));
+      DS_KEYS.forEach((ds, j) => {
+        const c = spec.get(ds, row);
+        METRICS.forEach((k, q) => cells.push(mk(row === 1 && k === "APD" ? "-" : c ? fmtV(c[k], k, spec.signed) : "…", w[3 + 4 * j + q], { fill: spec.fill })));
+      });
+      rows.push(new TableRow({ cantSplit: true, children: cells }));
+    });
+  }
+  return new Table({ width: { size: LAND_W, type: WidthType.DXA }, columnWidths: w, rows });
+}
+const nSeeds = Math.min(...DS_KEYS.map((ds) => dsByKey[ds].runs.length));
+const paperT5 = (m) => (ds, row) => PAPER_T5[m][ds][row];
+const diffT5 = (ds, row) => {
+  const o = oursT5(ds, row, "main"), pp = PAPER_T5.ours[ds][row];
+  if (!o) return null;
+  return { APD: row === 0 && o.APD && o.APD.length ? mean(o.APD) - pp.APD : null, OA: mean(o.OA) - pp.OA, AA: mean(o.AA) - pp.AA, K: mean(o.K) - pp.K };
+};
+children.push(h2("6.3. Bảng kiểu Table V: phương pháp đề xuất (Last / Average)"));
+children.push(p(`Cùng bố cục với Table V của bài báo: dòng Last = session cuối (APD của session cuối), dòng Average = trung bình OA/AA/Kappa qua tất cả các session. Kết quả tái lập của phương pháp đề xuất là trung bình ± độ lệch chuẩn qua ${nSeeds} seed. Dual-prompt và Adam-adapter chưa được tái lập (việc tiếp theo), nên hiện chỉ có số liệu của bài báo.`));
+children.push(caption(`Phương pháp đề xuất: tái lập (${nSeeds} seed) so với bài báo, cùng hai phương pháp tinh chỉnh tham số của bài báo`, "cùng bố cục Table V"));
+children.push(t5Table([
+  { name: "Dual-prompt (tái lập)", params: "…", get: () => null },
+  { name: "Adam-adapter (tái lập)", params: "…", get: () => null },
+  { name: "Ours — tái lập, phân loại theo mã (NME ở Base, fc sau đó)", params: "≈0,85M", bold: true, fill: "F2F2F2", get: (ds, row) => oursT5(ds, row, "main") },
+  { name: "Ours — tái lập, NME ở mọi session", params: "≈0,85M", get: (ds, row) => oursT5(ds, row, "nme") },
+  { name: "Chênh lệch tái lập (theo mã) − bài báo", params: "", signed: true, get: diffT5 },
+  { name: "Dual-prompt (bài báo)", params: PAPER_T5.dualprompt.params, get: paperT5("dualprompt") },
+  { name: "Adam-adapter (bài báo)", params: PAPER_T5.adamadapter.params, get: paperT5("adamadapter") },
+  { name: "Ours (bài báo)", params: PAPER_T5.ours.params, bold: true, get: paperT5("ours") },
+]));
+children.push(p("Ghi chú: APD theo NME của các lần chạy chính chưa được ghi (ô \"-\"), sẽ có khi chạy lại --eval nme. Với MUUFL, nếu dùng 2 hoặc 4 kênh LiDAR thay vì 1 kênh như bài báo ghi, Average OA của seed 0 tăng lên 79,08 / 79,79 (mục 7.4)."));
 const part2 = children.splice(0);
 
 // 7
